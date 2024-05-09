@@ -1,12 +1,13 @@
 const express = require("express");
-const { User } = require("../db");
+const { User, Account } = require("../db");
 const { z } = require("zod");
 const createError = require("http-errors");
+const jwt = require("jsonwebtoken");
 const JWT_secret = require("../config");
-const { authMiddleWares } = require("../middlewares");
-
+const { authMiddleware } = require("../middlewares");
 const router = express.Router();
 
+// Zod schema for user registration
 const userSchema = z.object({
   username: z.string().min(3).max(255).trim(),
   password: z.string().min(6).max(20).trim(),
@@ -14,25 +15,35 @@ const userSchema = z.object({
   lastName: z.string().trim(),
 });
 
-const updateBody = zod.object({
-  password: zod.string().optional(),
-  firstName: zod.string().optional(),
-  lastName: zod.string().optional(),
+// Zod schema for updating user information
+const updateBody = z.object({
+  password: z.string().optional(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
 });
 
+// Route for user registration
 router.post("/signup", async (req, res) => {
   try {
-    // const { username, password } = req.body;
     const validUser = userSchema.safeParse(req.body);
     if (!validUser.success) {
       return res.status(400).json(validUser.error.issues);
     }
+
+    const { username } = req.body;
     const existingUser = await User.findOne({ username });
     if (existingUser) {
-      throw createError(409, "Username already exists ");
+      throw createError(409, "Username already exists");
     }
+
     const newUser = new User(req.body);
     await newUser.save();
+    const userID = newUser._id;
+
+    await Account.create({
+      userId: userID,
+      balance: 1 + Math.random() * 10000,
+    });
 
     const payload = { userId: newUser._id };
     const token = jwt.sign(payload, JWT_secret);
@@ -47,6 +58,7 @@ router.post("/signup", async (req, res) => {
   }
 });
 
+// Route for user login
 router.post("/signin", async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -71,13 +83,13 @@ router.post("/signin", async (req, res) => {
   }
 });
 
-router.put("/", authMiddleWares, async (req, res) => {
+// Route for updating user information
+router.put("/update", authMiddleware, async (req, res) => {
   try {
     const { success } = updateBody.parse(req.body);
     if (!success) {
       res.status(400).json({ message: "invalid Fields" });
     }
-
     await User.updateOne({ _id: req.user.userId }, req.body);
     res.json({ message: "updated successfully" });
   } catch (err) {
@@ -88,16 +100,16 @@ router.put("/", authMiddleWares, async (req, res) => {
   }
 });
 
-app.get("/bulk", async (req, res) => {
+// Route for bulk user search
+router.get("/bulk", authMiddleware, async (req, res) => {
   try {
-    const filter = req.query.filter;
+    const filter = req.query.filter || "";
     const users = await User.find({
       $or: [
         { firstName: { $regex: `^${filter}`, $options: "i" } },
         { lastName: { $regex: `^${filter}`, $options: "i" } },
       ],
     });
-
     res.json(users);
   } catch (err) {
     console.error("Error finding users:", err);
@@ -106,29 +118,3 @@ app.get("/bulk", async (req, res) => {
 });
 
 module.exports = router;
-
-// const { authMiddleware } = require("./middleware");
-
-// router.put("/", authMiddleware, async (req, res) => {
-//   const { success, data } = updateBody.safeParse(req.body);
-
-//   if (!success) {
-//     return res.status(400).json({
-//       message: "Error while updating information"
-//     });
-//   }
-
-//   try {
-//     await User.updateOne(
-//       { _id: req.userId },
-//       { $set: { ...data } }
-//     );
-
-//     res.json({
-//       message: "Updated successfully"
-//     });
-//   } catch (err) {
-//     console.error('Error updating user:', err);
-//     res.status(500).send('Internal Server Error');
-//   }
-// });
