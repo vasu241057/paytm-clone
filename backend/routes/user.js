@@ -40,10 +40,17 @@ router.post("/signup", async (req, res) => {
     await newUser.save();
     const userID = newUser._id;
 
-    await Account.create({
-      userId: userID,
+    const newAccount = new Account({
+      userID,
       balance: 1 + Math.random() * 10000,
     });
+
+    await newAccount.save();
+
+    // await Account.create({
+    //   userID,
+    //   balance: 1 + Math.random() * 10000,
+    // });
 
     const payload = { userId: newUser._id };
     const token = jwt.sign(payload, JWT_secret);
