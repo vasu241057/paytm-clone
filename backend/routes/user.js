@@ -3,7 +3,7 @@ const { User, Account } = require("../db");
 const { z } = require("zod");
 const createError = require("http-errors");
 const jwt = require("jsonwebtoken");
-const JWT_secret = require("../config");
+require("dotenv").config();
 const { authMiddleware } = require("../middlewares");
 const { mongoose } = require("mongoose");
 
@@ -62,7 +62,7 @@ router.post("/signup", async (req, res) => {
     // await newAccount.save();
 
     const payload = { userId: userId };
-    const token = jwt.sign(payload, JWT_secret);
+    const token = jwt.sign(payload, process.env.JWT_secret);
     res.json({ token });
   } catch (err) {
     if (err.code === 11000) {
@@ -92,7 +92,7 @@ router.post("/signin", async (req, res) => {
     console.log(userId);
 
     const payload = { userId: userId };
-    const token = jwt.sign(payload, JWT_secret);
+    const token = jwt.sign(payload, process.env.JWT_secret);
     res.json({ token });
   } catch (err) {
     console.error(err.message);
