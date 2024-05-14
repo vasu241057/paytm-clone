@@ -5,6 +5,8 @@ const createError = require("http-errors");
 const jwt = require("jsonwebtoken");
 const JWT_secret = require("../config");
 const { authMiddleware } = require("../middlewares");
+const { mongoose } = require("mongoose");
+
 const router = express.Router();
 
 // Zod schema for user registration
@@ -36,23 +38,30 @@ router.post("/signup", async (req, res) => {
       throw createError(409, "Username already exists");
     }
 
-    const newUser = new User(req.body);
-    await newUser.save();
-    const userID = newUser._id;
+    const user = await User.create({
+      username: req.body.username,
+      password: req.body.password,
+      firstName: req.body.firstName,
+      lastName: req.body.lastName,
+    });
+    const userId = user._id;
 
-    const newAccount = new Account({
-      userID,
+    await Account.create({
+      userId,
       balance: 1 + Math.random() * 10000,
     });
 
-    await newAccount.save();
+    // const newUser = new User(req.body);
+    // await newUser.save();
+    // const userID = newUser._id;
 
-    // await Account.create({
+    // const newAccount = new Account({
     //   userID,
     //   balance: 1 + Math.random() * 10000,
     // });
+    // await newAccount.save();
 
-    const payload = { userId: newUser._id };
+    const payload = { userId: userId };
     const token = jwt.sign(payload, JWT_secret);
     res.json({ token });
   } catch (err) {
@@ -78,8 +87,11 @@ router.post("/signin", async (req, res) => {
     if (!isMatch) {
       throw createError(401, "invalid credentials");
     }
+    const userId = user._id;
+    console.log("aa");
+    console.log(userId);
 
-    const payload = { userID: user._id };
+    const payload = { userId: userId };
     const token = jwt.sign(payload, JWT_secret);
     res.json({ token });
   } catch (err) {
@@ -110,6 +122,17 @@ router.put("/update", authMiddleware, async (req, res) => {
 // Route for bulk user search
 router.get("/bulk", authMiddleware, async (req, res) => {
   try {
+    const current = req.user.userId;
+    console.log(current);
+    const userId = new mongoose.Types.ObjectId(current); // Convert string to ObjectId
+
+    const currentUser = await User.findOne({ _id: userId });
+    const userAccount = await Account.findOne({ userId: userId });
+
+    console.log(currentUser);
+    if (!currentUser) {
+      throw createError(401, "invalid credentials");
+    }
     const filter = req.query.filter || "";
     const users = await User.find({
       $or: [
@@ -117,7 +140,11 @@ router.get("/bulk", authMiddleware, async (req, res) => {
         { lastName: { $regex: `^${filter}`, $options: "i" } },
       ],
     });
-    res.json(users);
+    const withoutCurrent = users.filter((user) => {
+      return user.username != currentUser.username;
+    });
+
+    res.json({ withoutCurrent, current: userAccount });
   } catch (err) {
     console.error("Error finding users:", err);
     res.status(500).send("Internal Server Error");
